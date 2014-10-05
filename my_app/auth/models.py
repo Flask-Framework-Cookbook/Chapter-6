@@ -43,3 +43,7 @@ class RegistrationForm(Form):
 class LoginForm(Form):
     username = TextField('Username', [InputRequired()])
     password = PasswordField('Password', [InputRequired()])
+
+
+class OpenIDForm(Form):
+    openid = TextField('OpenID', [InputRequired()])

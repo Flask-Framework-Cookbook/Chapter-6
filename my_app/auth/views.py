@@ -2,8 +2,8 @@ from flask import request, render_template, flash, redirect, url_for, \
     session, Blueprint, g
 from flask.ext.login import current_user, login_user, logout_user, \
     login_required
-from my_app import db, login_manager
-from my_app.auth.models import User, RegistrationForm, LoginForm
+from my_app import db, login_manager, oid
+from my_app.auth.models import User, RegistrationForm, LoginForm, OpenIDForm
 
 auth = Blueprint('auth', __name__)
 
@@ -55,21 +55,42 @@ def register():
 
 
 @auth.route('/login', methods=['GET', 'POST'])
+@oid.loginhandler
 def login():
-    if current_user.is_authenticated():
-        flash('You are already logged in.')
-        return redirect(url_for('auth.home'))
+    if g.user is not None and current_user.is_authenticated():
+        flash('You are already logged in.', 'info')
+        return redirect(url_for('home'))
 
     form = LoginForm(request.form)
+    openid_form = OpenIDForm(request.form)
 
-    if request.method == 'POST' and form.validate():
-        username = request.form.get('username')
-        password = request.form.get('password')
-        existing_user = User.query.filter_by(username=username).first()
+    if request.method == 'POST':
+        if request.form.has_key('openid'):
+            openid_form.validate()
+            if openid_form.errors:
+                flash(openid_form.errors, 'danger')
+                return render_template(
+                    'login.html', form=form, openid_form=openid_form
+                )
+            openid = request.form.get('openid')
+            return oid.try_login(openid, ask_for=['email', 'nickname'])
+        else:
+            form.validate()
+            if form.errors:
+                flash(form.errors, 'danger')
+                return render_template(
+                    'login.html', form=form, openid_form=openid_form
+                )
+            username = request.form.get('username')
+            password = request.form.get('password')
+            existing_user = User.query.filter_by(username=username).first()
 
-        if not (existing_user and existing_user.check_password(password)):
-            flash('Invalid username or password. Please try again.', 'danger')
-            return render_template('login.html', form=form)
+            if not (existing_user and existing_user.check_password(password)):
+                flash(
+                    'Invalid username or password. Please try again.',
+                    'danger'
+                )
+                return render_template('login.html', form=form)
 
         login_user(existing_user)
         flash('You have successfully logged in.', 'success')
@@ -78,7 +99,22 @@ def login():
     if form.errors:
         flash(form.errors, 'danger')
 
-    return render_template('login.html', form=form)
+    return render_template('login.html', form=form, openid_form=openid_form)
+
+
+@oid.after_login
+def after_login(resp):
+    username = resp.nickname or resp.email
+    if not username:
+        flash('Invalid login. Please try again.', 'danger')
+        return redirect(url_for('auth.login'))
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        user = User(username, '')
+        db.session.add(user)
+        db.session.commit()
+    login_user(user)
+    return redirect(url_for('auth.home'))
 
 
 @auth.route('/logout')
