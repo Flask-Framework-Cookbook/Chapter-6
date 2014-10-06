@@ -45,6 +45,15 @@ google = oauth.remote_app('google',
     consumer_secret='GOOGLE_CLIENT_SECRET'
 )
 
+twitter = oauth.remote_app('twitter',
+    base_url='https://api.twitter.com/1.1/',
+    request_token_url='https://api.twitter.com/oauth/request_token',
+    access_token_url='https://api.twitter.com/oauth/access_token',
+    authorize_url='https://api.twitter.com/oauth/authenticate',
+    consumer_key='Twitter API Key',
+    consumer_secret='Twitter API Secret'
+)
+
 from my_app.auth.views import auth
 app.register_blueprint(auth)
 

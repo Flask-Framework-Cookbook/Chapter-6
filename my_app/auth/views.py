@@ -3,7 +3,7 @@ from flask import request, render_template, flash, redirect, url_for, \
     session, Blueprint, g
 from flask.ext.login import current_user, login_user, logout_user, \
     login_required
-from my_app import db, login_manager, oid, facebook, google
+from my_app import db, login_manager, oid, facebook, google, twitter
 from my_app.auth.models import User, RegistrationForm, LoginForm, OpenIDForm
 
 auth = Blueprint('auth', __name__)
@@ -195,6 +195,43 @@ def google_authorized(resp):
 @google.tokengetter
 def get_google_oauth_token():
     return session.get('google_oauth_token')
+
+
+@auth.route('/twitter-login')
+def twitter_login():
+    return twitter.authorize(
+        callback=url_for(
+            'auth.twitter_authorized',
+            next=request.args.get('next') or request.referrer or None,
+            _external=True
+        ))
+
+
+@auth.route('/twitter-login/authorized')
+@twitter.authorized_handler
+def twitter_authorized(resp):
+    if resp is None:
+        return 'Access denied: reason=%s error=%s' % (
+            request.args['error_reason'],
+            request.args['error_description']
+        )
+    session['twitter_oauth_token'] = resp['oauth_token'] + \
+            resp['oauth_token_secret']
+
+    user = User.query.filter_by(username=resp['screen_name']).first()
+    if not user:
+        user = User(resp['screen_name'], '')
+        db.session.add(user)
+        db.session.commit()
+
+    login_user(user)
+    flash('Logged in as twitter handle=%s' % resp['screen_name'])
+    return redirect(request.args.get('next'))
+
+
+@twitter.tokengetter
+def get_twitter_oauth_token():
+    return session.get('twitter_oauth_token')
 
 
 @auth.route('/logout')
