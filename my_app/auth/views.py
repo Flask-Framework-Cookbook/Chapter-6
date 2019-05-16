@@ -4,6 +4,7 @@ from flask_login import current_user, login_user, logout_user, \
     login_required
 from flask_dance.contrib.facebook import make_facebook_blueprint, facebook
 from flask_dance.contrib.google import make_google_blueprint, google
+from flask_dance.contrib.twitter import make_twitter_blueprint, twitter
 from my_app import db, login_manager
 from my_app.auth.models import User, RegistrationForm, LoginForm
 
@@ -17,6 +18,7 @@ google_blueprint = make_google_blueprint(
         "https://www.googleapis.com/auth/userinfo.email",
         "https://www.googleapis.com/auth/userinfo.profile"],
     redirect_to='auth.google_login')
+twitter_blueprint = make_twitter_blueprint(redirect_to='auth.twitter_login')
 
 
 @auth.route("/facebook-login")
@@ -55,6 +57,26 @@ def google_login():
     login_user(user)
     flash(
         'Logged in as name=%s using Google login' % (
+            resp.json()['name']), 'success' )
+    return redirect(request.args.get('next', url_for('auth.home')))
+
+
+@auth.route("/twitter-login")
+def twitter_login():
+    if not twitter.authorized:
+        return redirect(url_for("twitter.login"))
+
+    resp = twitter.get("account/verify_credentials.json")
+
+    user = User.query.filter_by(username=resp.json()["screen_name"]).first()
+    if not user:
+        user = User(resp.json()["screen_name"], '')
+        db.session.add(user)
+        db.session.commit()
+
+    login_user(user)
+    flash(
+        'Logged in as name=%s using Twitter login' % (
             resp.json()['name']), 'success' )
     return redirect(request.args.get('next', url_for('auth.home')))
 
